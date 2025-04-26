@@ -2,7 +2,6 @@
 
 #include "motor_regulator.h"
 #include <SoftwareSerial.h>
-SoftwareSerial logger(11, 12);
 
 #define TICKS_PER_REV 372
 #define WHEEL_D 67

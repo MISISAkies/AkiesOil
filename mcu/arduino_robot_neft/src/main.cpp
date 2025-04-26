@@ -3,12 +3,17 @@
 #include "ros2_communication.hpp"
 #include "sensors.hpp"
 #include "Octoliner.h"
+#include "communication_module.h"
+#include "logger.h"
+#include <SoftwareSerial.h>
 
+// Create a SoftwareSerial instance
+SoftwareSerial softLogger(11, 12); // RX, TX pins
 
-#define BASE_SPEED 175
-bool crossFlag = 1;
-byte nCross = 0;
-int gray;
+// Create a Logger instance
+Logger logger(&softLogger);
+
+#define BASE_SPEED 240
 
 
 //ЛЕВЫЙ МОТОР
@@ -41,20 +46,19 @@ Octoliner octoliner;
 LineSensor lline(A3);
 LineSensor rline(A2);
 LineSensor mline(A1);
-PID linePid(0.6, 0.001, 0.05, 100);
+PID linePid(0.5, 0.05, 0.01, 100); // 18 плавно 20 остро / 
+DriveBase drive_base(left_regulator, right_regulator);
 
 void setup() {
-  //left_regulator.motor.set_pwmdir(255);
-  //right_regulator.set_delta(1);
-  //turnAngle(90);
+  logger.begin();
+  logger.setLogLevel(LOG_DEBUG);
+  logger.debug("Init pins");
   pinMode(2, INPUT);
   pinMode(3, INPUT);
   pinMode(10, INPUT);
   pinMode(9, INPUT);
-  //oled.print(200);
-  logger.begin(4800);
-  Serial.begin(115200);
-  logger.print("Setup");
+  octoliner.begin();
+  octoliner.setSensitivity(240);
 }
 
 #define PT(x) Serial.print(x); Serial.print('\t')
@@ -70,92 +74,71 @@ void stop() {
   right_regulator.motor.set_pwmdir(0);
 }
 
-void loop() {
-  static unsigned long freq = millis();
-  command_spin();
-  
-  if (millis() - freq >= 1000 * DT) {
-    freq = millis();
-    left_regulator.update(); //Не трогать.
-    right_regulator.update(); //Не трогать.
+#define LINE_TRASHOLD 700
+bool is_cross() {
+  int16_t brightness_value[8];
+  octoliner.analogReadAll(brightness_value);
+  int cnt = 0;
+  for (int i_br_val = 0; i_br_val < 8; i_br_val++) {
+    if (brightness_value[i_br_val] > LINE_TRASHOLD) {cnt++;}
   }
-////
-//  Serial.print(lline.read());
-//  Serial.print("      ");
-//  Serial.print(rline.read());
-//  Serial.print("      ");
-//  Serial.print(mline.read());
-//  Serial.println();
-//
-//
-  if (state == 1) { //Если робот выключен
-    gray = mline.read() - min(rline.read(), lline.read()) / 2;
-    crossFlag = 1;
-    nCross = 0;
-    return;
-  }else if (state == 2) { //PAUSE
-    stop();
-    return;
-  } //Нужно написать 3 что бы стартануть робота или продолжить выполнение задания
-  //gray = mline.read() - max(rline.read(), lline.read()) / 2;
-  int ans = linePid.calc(lline.read() - rline.read());
-  left_regulator.motor.set_pwmdir(BASE_SPEED-ans);
-  right_regulator.motor.set_pwmdir(BASE_SPEED+ans);
-  if (mline.read() < 200) {
-    nCross++;
-    //Проезд на примерно пол корпуса вперед
-    left_regulator.motor.set_pwmdir(150);
-    right_regulator.motor.set_pwmdir(150);
-    delay(280);
-    stop();
-    left_regulator.motor.set_pwmdir(0);
-    right_regulator.motor.set_pwmdir(0);
+  //logger.debug(str_out);
+  return (cnt > 5);
+}
 
+void readPIDCoefficients() {
+  if (Serial.available() > 0) {
+    stop();
+    Serial.setTimeout(30000);
+    String data = Serial.readStringUntil('\n');
+    data.trim();
     
-    if ((nCross == 2) or (nCross == 5)) delay(100);
-    else delay(100);
-
-    if (nCross == 3) {
-      left_regulator.motor.set_pwmdir(-150);
-      right_regulator.motor.set_pwmdir(150);
-      delay(260);
-      while (rline.read() > 200){
-        left_regulator.motor.set_pwmdir(-150);
-        right_regulator.motor.set_pwmdir(150);
-      }
-      delay(260);
-      while (rline.read() > 200){
-        left_regulator.motor.set_pwmdir(-150);
-        right_regulator.motor.set_pwmdir(150);
-      }
-      stop();
-      delay(500);
-      left_regulator.motor.set_pwmdir(-150);
-      right_regulator.motor.set_pwmdir(150);
-      delay(260);
-      while (rline.read() > 200){
-        left_regulator.motor.set_pwmdir(-150);
-        right_regulator.motor.set_pwmdir(150);
-      }
-      stop();
-      //Serial.println("Ловушка");  
-    }else if (nCross == 6) {
-      stop();
-      state = 1;
+    // Parse the data using comma as separator
+    int firstCommaIndex = data.indexOf(',');
+    int secondCommaIndex = data.indexOf(',', firstCommaIndex + 1);
+    
+    if (firstCommaIndex != -1 && secondCommaIndex != -1) {
+      float kp = data.substring(0, firstCommaIndex).toFloat();
+      float ki = data.substring(firstCommaIndex + 1, secondCommaIndex).toFloat();
+      float kd = data.substring(secondCommaIndex + 1).toFloat();
       
-    }else {
-//        turnTicks = turnAngle(-90, 140);
-//        while (abs(left_regulator.encoder.ticks - turn_lStart_ticks) < abs(turnTicks)) {}
-//        stop();
-      left_regulator.motor.set_pwmdir(-150);
-      right_regulator.motor.set_pwmdir(150);
-      delay(260);
-      while (rline.read() > 200){
-        left_regulator.motor.set_pwmdir(-150);
-        right_regulator.motor.set_pwmdir(150);
-      }
-      stop();
-      delay(100);
+      // Update PID coefficients
+      linePid.kp = kp;
+      linePid.ki = ki;
+      linePid.kd = kd;
+      
+      // Reset integral to avoid sudden changes
+      linePid.integral = 0;
+      
+      // Log the new coefficients
+      logger.debug("Updated PID coefficients: Kp=" + String(kp) + ", Ki=" + String(ki) + ", Kd=" + String(kd));
+      Serial.println("Updated PID coefficients: Kp=" + String(kp) + ", Ki=" + String(ki) + ", Kd=" + String(kd));
+    } else {
+      Serial.println("Invalid format. Use: kp,ki,kd");
     }
   }
+}
+
+void linefollow() {
+  while (!is_cross()) {
+    int ans = linePid.calc((octoliner.analogRead(1) - octoliner.analogRead(5))/5);
+    left_regulator.motor.set_pwmdir(BASE_SPEED+ans);
+    right_regulator.motor.set_pwmdir(BASE_SPEED-ans);
+    readPIDCoefficients();
+  }
+}
+
+void loop() {
+
+  // linefollow();
+  // stop();
+  // left_regulator.motor.set_pwmdir(200); +- ЕЗДА ПРЯМО НА ВСЯКИЙ СЛУЧАЙ
+  // right_regulator.motor.set_pwmdir(235);
+  // delay(500);
+  stop();
+  while (true)
+  {
+    /* code */
+  }
+  
 }
