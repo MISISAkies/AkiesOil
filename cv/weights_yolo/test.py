@@ -25,7 +25,7 @@ def write_log(message):
         f.write(f"[{timestamp}] {message}\n")
 
 # Загрузка модели YOLO
-model = YOLO('/home/ubuntu/robots_monorepo/mcu/weights_yolo/misis_hack_yolo_ver2.pt')
+model = YOLO('/home/ubuntu/robots_monorepo/cv/weights_yolo/misis_hack_yolo_ver2.pt')
 
 # Инициализация захвата видео
 cap = cv2.VideoCapture('/dev/video0')
