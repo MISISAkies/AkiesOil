@@ -198,8 +198,11 @@ void setup() {
   octoliner.begin();
   octoliner.setSensitivity(200);
 
+  Serial.println("Delay");
   delay(1500);
+  Serial.println("Start calib");
   octoliner_calibrate();
+  Serial.println("End calib");
   delay(500);
 }
 
@@ -251,6 +254,7 @@ void loop() {
   turn_enc(-94);
   stop_();
 
+  //фейк
   cross(1);
   move_cm(70, 12);
   
@@ -260,8 +264,10 @@ void loop() {
   turn_enc(-94);
   stop_();
 
+  line_cm(80, 50);
   cross(1);
   move_cm(70, 12);
+  line_cm(80, 50);
   cross(1);
   move_cm(70, 12);
 
