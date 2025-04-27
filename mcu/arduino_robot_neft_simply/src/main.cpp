@@ -231,7 +231,7 @@ void printLineNorm() {
 
 void loop() {
 
-  delay(700);
+  delay(3000);
 
   cross(1);
   move_cm(70, 12);
