@@ -111,9 +111,9 @@ void move_cm(int speed_, int dist) {
 
 // --- PID параметры ---
 // !!! Переподбери под новый способ определения ошибки (line_position возвращает в районе [-3.5;+3.5]) !!!
-float Kp = 18.0;   // подбери! значения множителя сильно растут (несколько-десятков)
+float Kp = 36.0;   // подбери! значения множителя сильно растут (несколько-десятков)
 float Ki = 0.06;
-float Kd = 26.0;
+float Kd = 30.0;
 
 float last_err = 0;
 float sum_err = 0;
@@ -157,7 +157,7 @@ bool is_cross() {
 void cross(int n = 1){ 
   unsigned long long point = millis();
   while(n) {
-    line(85);
+    line(95);
     if(is_cross() and point <= millis()) {
       n--;
       point = millis() + 500;
